@@ -31,40 +31,70 @@
                 </div>
 
                 <!-- Language Selection -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-white text-sm font-medium mb-2">
-                            <i class="fas fa-globe mr-1"></i>
-                            Target Language
-                        </label>
-                        <select 
-                            id="targetLanguage" 
-                            name="target_language" 
-                            class="w-full px-4 py-3 rounded-lg bg-white bg-opacity-20 text-white border border-white border-opacity-30 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                            required
-                        >
-                            @foreach($languages as $code => $name)
-                                @if($code !== 'en')
-                                    <option value="{{ $code }}" class="text-gray-800">{{ $name }}</option>
-                                @endif
-                            @endforeach
-                        </select>
+                <div class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                        <div class="md:col-span-5">
+                            <label class="block text-white text-sm font-medium mb-2">
+                                <i class="fas fa-flag mr-1"></i>
+                                Source Language
+                            </label>
+                            <select 
+                                id="sourceLanguage" 
+                                name="source_language" 
+                                class="w-full px-4 py-3 rounded-lg bg-white bg-opacity-20 text-white border border-white border-opacity-30 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                required
+                            >
+                                @foreach($languages as $code => $name)
+                                    <option value="{{ $code }}" class="text-gray-800" {{ $code === 'en' ? 'selected' : '' }}>{{ $name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div class="md:col-span-2 flex justify-center">
+                            <button 
+                                type="button" 
+                                id="swapLanguages" 
+                                class="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-3 rounded-lg transition duration-300 border border-white border-opacity-30"
+                                title="Swap languages"
+                            >
+                                <i class="fas fa-exchange-alt"></i>
+                            </button>
+                        </div>
+
+                        <div class="md:col-span-5">
+                            <label class="block text-white text-sm font-medium mb-2">
+                                <i class="fas fa-globe mr-1"></i>
+                                Target Language
+                            </label>
+                            <select 
+                                id="targetLanguage" 
+                                name="target_language" 
+                                class="w-full px-4 py-3 rounded-lg bg-white bg-opacity-20 text-white border border-white border-opacity-30 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                required
+                            >
+                                @foreach($languages as $code => $name)
+                                    <option value="{{ $code }}" class="text-gray-800" {{ $code === 'es' ? 'selected' : '' }}>{{ $name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
                     </div>
 
-                    <div>
-                        <label class="block text-white text-sm font-medium mb-2">
-                            <i class="fas fa-user mr-1"></i>
-                            Voice Type
-                        </label>
-                        <select 
-                            id="voiceType" 
-                            name="voice_type" 
-                            class="w-full px-4 py-3 rounded-lg bg-white bg-opacity-20 text-white border border-white border-opacity-30 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                            required
-                        >
-                            <option value="female" class="text-gray-800">Female</option>
-                            <option value="male" class="text-gray-800">Male</option>
-                        </select>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-white text-sm font-medium mb-2">
+                                <i class="fas fa-user mr-1"></i>
+                                Voice Type
+                            </label>
+                            <select 
+                                id="voiceType" 
+                                name="voice_type" 
+                                class="w-full px-4 py-3 rounded-lg bg-white bg-opacity-20 text-white border border-white border-opacity-30 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                required
+                            >
+                                <option value="female" class="text-gray-800">Female</option>
+                                <option value="male" class="text-gray-800">Male</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
@@ -201,7 +231,7 @@
                 <div class="text-sm text-white bg-white bg-opacity-10 p-3 rounded-lg">
                     <div class="font-medium">{{ Str::limit($item->original_text, 30) }}</div>
                     <div class="text-gray-300 text-xs mt-1">
-                        EN → {{ strtoupper($item->target_language) }}
+                        {{ strtoupper($item->source_language) }} → {{ strtoupper($item->target_language) }}
                     </div>
                 </div>
                 @endforeach
@@ -227,6 +257,18 @@ document.getElementById('pitch').addEventListener('input', function() {
 
 document.getElementById('speed').addEventListener('input', function() {
     document.getElementById('speedValue').textContent = this.value;
+});
+
+// Language swap functionality
+document.getElementById('swapLanguages').addEventListener('click', function() {
+    const sourceSelect = document.getElementById('sourceLanguage');
+    const targetSelect = document.getElementById('targetLanguage');
+    
+    const sourceValue = sourceSelect.value;
+    const targetValue = targetSelect.value;
+    
+    sourceSelect.value = targetValue;
+    targetSelect.value = sourceValue;
 });
 
 // Form submission
@@ -270,12 +312,78 @@ function speakText(text, language, voiceType, pitch, speed) {
         currentUtterance = new SpeechSynthesisUtterance(text);
         
         const voices = speechSynthesis.getVoices();
-        const voice = voices.find(v => 
-            v.lang.startsWith(language) && 
-            (voiceType === 'female' ? v.name.toLowerCase().includes('female') : v.name.toLowerCase().includes('male'))
-        ) || voices.find(v => v.lang.startsWith(language)) || voices[0];
         
-        if (voice) currentUtterance.voice = voice;
+        // More accurate voice selection logic
+        let selectedVoice = null;
+        
+        // Map language codes to full locale codes for better matching
+        const langMap = {
+            'en': 'en-US',
+            'es': 'es-ES',
+            'fr': 'fr-FR',
+            'de': 'de-DE',
+            'it': 'it-IT',
+            'pt': 'pt-PT',
+            'ru': 'ru-RU',
+            'ja': 'ja-JP',
+            'ko': 'ko-KR',
+            'zh': 'zh-CN'
+        };
+        
+        const targetLang = langMap[language] || language;
+        
+        // Filter voices by language first
+        const languageVoices = voices.filter(v => 
+            v.lang.startsWith(language) || v.lang === targetLang
+        );
+        
+        if (languageVoices.length > 0) {
+            // Try to find voice matching gender preference
+            if (voiceType === 'female') {
+                // Look for female indicators in voice name
+                selectedVoice = languageVoices.find(v => 
+                    v.name.toLowerCase().includes('female') || 
+                    v.name.toLowerCase().includes('woman') ||
+                    v.name.toLowerCase().includes('zira') ||
+                    v.name.toLowerCase().includes('susan') ||
+                    v.name.toLowerCase().includes('samantha') ||
+                    v.name.toLowerCase().includes('victoria') ||
+                    v.name.toLowerCase().includes('amelie') ||
+                    v.name.toLowerCase().includes('luciana')
+                );
+            } else {
+                // Look for male indicators in voice name
+                selectedVoice = languageVoices.find(v => 
+                    v.name.toLowerCase().includes('male') || 
+                    v.name.toLowerCase().includes('man') ||
+                    v.name.toLowerCase().includes('david') ||
+                    v.name.toLowerCase().includes('mark') ||
+                    v.name.toLowerCase().includes('daniel') ||
+                    v.name.toLowerCase().includes('thomas') ||
+                    v.name.toLowerCase().includes('jorge') ||
+                    v.name.toLowerCase().includes('diego')
+                );
+            }
+            
+            // If no gender-specific voice found, use first available for the language
+            if (!selectedVoice) {
+                // For better gender selection, prefer voices at odd (male) or even (female) indices
+                if (voiceType === 'female' && languageVoices.length > 1) {
+                    selectedVoice = languageVoices[1]; // Often the second voice is female
+                } else {
+                    selectedVoice = languageVoices[0];
+                }
+            }
+        } else {
+            // Fallback to default voice if no language match
+            selectedVoice = voices[0];
+        }
+        
+        if (selectedVoice) {
+            currentUtterance.voice = selectedVoice;
+            console.log('Selected voice:', selectedVoice.name, selectedVoice.lang);
+        }
+        
         currentUtterance.pitch = parseFloat(pitch);
         currentUtterance.rate = parseFloat(speed);
         
@@ -301,6 +409,7 @@ document.getElementById('playBtn').addEventListener('click', function() {
     const formData = new FormData(document.getElementById('translationForm'));
     const data = Object.fromEntries(formData);
     
+    // Use target language for speech (the translated text)
     speakText(translatedText, data.target_language, data.voice_type, data.pitch, data.speed);
 });
 

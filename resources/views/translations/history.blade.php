@@ -38,7 +38,7 @@
                         </td>
                         <td class="py-4 px-4">
                             <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                EN → {{ strtoupper($translation->target_language) }}
+                                {{ strtoupper($translation->source_language) }} → {{ strtoupper($translation->target_language) }}
                             </span>
                         </td>
                         <td class="py-4 px-4">
@@ -116,14 +116,79 @@ function playTranslation(translation) {
         
         const utterance = new SpeechSynthesisUtterance(translation.translated_text);
         
-        // Find appropriate voice
         const voices = speechSynthesis.getVoices();
-        const voice = voices.find(v => 
-            v.lang.startsWith(translation.target_language) && 
-            (translation.voice_type === 'female' ? v.name.toLowerCase().includes('female') : v.name.toLowerCase().includes('male'))
-        ) || voices.find(v => v.lang.startsWith(translation.target_language)) || voices[0];
         
-        if (voice) utterance.voice = voice;
+        // More accurate voice selection logic
+        let selectedVoice = null;
+        
+        // Map language codes to full locale codes for better matching
+        const langMap = {
+            'en': 'en-US',
+            'es': 'es-ES',
+            'fr': 'fr-FR',
+            'de': 'de-DE',
+            'it': 'it-IT',
+            'pt': 'pt-PT',
+            'ru': 'ru-RU',
+            'ja': 'ja-JP',
+            'ko': 'ko-KR',
+            'zh': 'zh-CN'
+        };
+        
+        const targetLang = langMap[translation.target_language] || translation.target_language;
+        
+        // Filter voices by language first
+        const languageVoices = voices.filter(v => 
+            v.lang.startsWith(translation.target_language) || v.lang === targetLang
+        );
+        
+        if (languageVoices.length > 0) {
+            // Try to find voice matching gender preference
+            if (translation.voice_type === 'female') {
+                // Look for female indicators in voice name
+                selectedVoice = languageVoices.find(v => 
+                    v.name.toLowerCase().includes('female') || 
+                    v.name.toLowerCase().includes('woman') ||
+                    v.name.toLowerCase().includes('zira') ||
+                    v.name.toLowerCase().includes('susan') ||
+                    v.name.toLowerCase().includes('samantha') ||
+                    v.name.toLowerCase().includes('victoria') ||
+                    v.name.toLowerCase().includes('amelie') ||
+                    v.name.toLowerCase().includes('luciana')
+                );
+            } else {
+                // Look for male indicators in voice name
+                selectedVoice = languageVoices.find(v => 
+                    v.name.toLowerCase().includes('male') || 
+                    v.name.toLowerCase().includes('man') ||
+                    v.name.toLowerCase().includes('david') ||
+                    v.name.toLowerCase().includes('mark') ||
+                    v.name.toLowerCase().includes('daniel') ||
+                    v.name.toLowerCase().includes('thomas') ||
+                    v.name.toLowerCase().includes('jorge') ||
+                    v.name.toLowerCase().includes('diego')
+                );
+            }
+            
+            // If no gender-specific voice found, use first available for the language
+            if (!selectedVoice) {
+                // For better gender selection, prefer voices at odd (male) or even (female) indices
+                if (translation.voice_type === 'female' && languageVoices.length > 1) {
+                    selectedVoice = languageVoices[1]; // Often the second voice is female
+                } else {
+                    selectedVoice = languageVoices[0];
+                }
+            }
+        } else {
+            // Fallback to default voice if no language match
+            selectedVoice = voices[0];
+        }
+        
+        if (selectedVoice) {
+            utterance.voice = selectedVoice;
+            console.log('Selected voice:', selectedVoice.name, selectedVoice.lang);
+        }
+        
         utterance.pitch = parseFloat(translation.pitch);
         utterance.rate = parseFloat(translation.speed);
         

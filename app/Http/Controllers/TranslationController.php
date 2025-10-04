@@ -26,6 +26,7 @@ class TranslationController extends Controller
     {
         $request->validate([
             'text' => 'required|string|max:5000',
+            'source_language' => 'required|string',
             'target_language' => 'required|string',
             'voice_type' => 'required|in:male,female',
             'pitch' => 'required|numeric|between:0.5,2.0',
@@ -33,15 +34,24 @@ class TranslationController extends Controller
         ]);
 
         try {
+            // Check if source and target are the same
+            if ($request->source_language === $request->target_language) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Source and target languages must be different'
+                ], 422);
+            }
+
             // Translate text using FREE APIs only
             $translatedText = $this->translateText(
                 $request->text, 
+                $request->source_language,
                 $request->target_language
             );
 
             $translation = Translation::create([
                 'original_text' => $request->text,
-                'source_language' => 'en',
+                'source_language' => $request->source_language,
                 'target_language' => $request->target_language,
                 'translated_text' => $translatedText,
                 'voice_type' => $request->voice_type,
@@ -65,7 +75,7 @@ class TranslationController extends Controller
         }
     }
 
-    private function translateText($text, $targetLanguage)
+    private function translateText($text, $sourceLanguage, $targetLanguage)
     {
         // Try FREE translation services in order of preference
         $translationMethods = [
@@ -76,7 +86,7 @@ class TranslationController extends Controller
 
         foreach ($translationMethods as $method) {
             try {
-                $result = $this->$method($text, $targetLanguage);
+                $result = $this->$method($text, $sourceLanguage, $targetLanguage);
                 if ($result && $result !== $text && strlen(trim($result)) > 0) {
                     Log::info("Translation successful using: {$method}");
                     return $result;
@@ -89,20 +99,20 @@ class TranslationController extends Controller
 
         // If all FREE methods fail, return enhanced mock translation
         Log::warning('All free translation services failed, using mock translation');
-        return $this->getMockTranslation($text, $targetLanguage);
+        return $this->getMockTranslation($text, $sourceLanguage, $targetLanguage);
     }
 
     /**
      * MyMemory Translation API - COMPLETELY FREE
      * 5000 chars/day anonymous, 50000 chars/day with email
      */
-    private function myMemory($text, $targetLanguage)
+    private function myMemory($text, $sourceLanguage, $targetLanguage)
     {
         $url = 'https://api.mymemory.translated.net/get';
         
         $params = [
             'q' => $text,
-            'langpair' => 'en|' . $targetLanguage,
+            'langpair' => $sourceLanguage . '|' . $targetLanguage,
             'mt' => '1', // Enable machine translation
         ];
 
@@ -142,7 +152,7 @@ class TranslationController extends Controller
     /**
      * LibreTranslate API - COMPLETELY FREE & OPEN SOURCE
      */
-    private function libreTranslate($text, $targetLanguage)
+    private function libreTranslate($text, $sourceLanguage, $targetLanguage)
     {
         $endpoints = [
             'https://libretranslate.com/translate',
@@ -156,7 +166,7 @@ class TranslationController extends Controller
                     ->timeout(30)
                     ->post($endpoint, [
                         'q' => $text,
-                        'source' => 'en',
+                        'source' => $sourceLanguage,
                         'target' => $targetLanguage,
                         'format' => 'text'
                     ]);
@@ -218,7 +228,7 @@ class TranslationController extends Controller
         ]);
     }
 
-    private function getMockTranslation($text, $targetLanguage)
+    private function getMockTranslation($text, $sourceLanguage, $targetLanguage)
     {
         // Enhanced mock translations - more realistic
         $translations = [

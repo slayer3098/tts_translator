@@ -34,20 +34,17 @@ class TranslationController extends Controller
         ]);
 
         try {
-            // Check if source and target are the same
+            // If source and target are the same, skip translation
             if ($request->source_language === $request->target_language) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Source and target languages must be different'
-                ], 422);
+                $translatedText = $request->text;
+            } else {
+                // Translate text using FREE APIs only
+                $translatedText = $this->translateText(
+                    $request->text, 
+                    $request->source_language,
+                    $request->target_language
+                );
             }
-
-            // Translate text using FREE APIs only
-            $translatedText = $this->translateText(
-                $request->text, 
-                $request->source_language,
-                $request->target_language
-            );
 
             $translation = Translation::create([
                 'original_text' => $request->text,
